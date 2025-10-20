@@ -73,22 +73,39 @@ python test_setup.py
 
 ## 🎯 Uso
 
-⚠️ **Importante**: Siempre activa el entorno virtual antes de usar el agente:
+⚠️ **Importante**: Siempre activa el entorno virtual antes de usar el agente.
+
+### Opción 1: Script de ejecución (Recomendado)
+
+El script `run_agent.sh` maneja automáticamente la activación del entorno virtual:
+
 ```bash
-source .venv/bin/activate  # En macOS/Linux
+# Ejecutar una tarea específica
+./run_agent.sh "Crea un archivo hello.py que imprima 'Hola Mundo'"
+
+# Modo interactivo
+./run_agent.sh --interactive
+
+# Ejecutar tests
+./run_agent.sh --test
+
+# Demo rápido (sin modelo real)
+./run_agent.sh --demo "tu objetivo aquí"
+
+# Mostrar ayuda
+./run_agent.sh --help
 ```
 
-### Modo Simple
-Ejecuta una tarea específica:
+### Opción 2: Ejecución manual
 
 ```bash
+# Activar entorno virtual
+source .venv/bin/activate
+
+# Ejecutar una tarea específica
 python main.py "Crea un archivo hello.py que imprima 'Hola Mundo'"
-```
 
-### Modo Interactivo
-Para múltiples tareas en una sesión:
-
-```bash
+# Modo interactivo
 python main.py --interactive
 ```
 
@@ -196,6 +213,9 @@ coding-agent/
 ├── model_loader.py      # Carga y gestión del modelo
 ├── tools.py            # Herramientas disponibles para el agente
 ├── requirements.txt    # Dependencias de Python
+├── run_agent.sh        # Script de ejecución con entorno virtual
+├── demo.py             # Demo rápido sin modelo real
+├── test_setup.py       # Script de verificación del setup
 ├── README.md          # Este archivo
 └── .venv/             # Entorno virtual (creado tras instalación)
 ```
