@@ -1,0 +1,9 @@
+# Entorno virtual de UV
+.venv/
+
+# Archivos de Python
+__pycache__/
+*.pyc
+
+# OS-specific
+.DS_Storey
