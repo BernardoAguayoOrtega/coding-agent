@@ -1,13 +1,24 @@
 """
 Tools - Herramientas disponibles para el agente de codificación
+Enhanced with reflection and code quality tools
 """
 
 import subprocess
 import os
 import shutil
 import json
+import ast
 from pathlib import Path
 from typing import List, Dict, Any
+
+# Import reflection and human loop systems
+try:
+    from reflection import CodeReflector, format_reflection_results, ReflectionType
+    from human_loop import HumanInTheLoop, create_human_loop
+    REFLECTION_AVAILABLE = True
+except ImportError:
+    REFLECTION_AVAILABLE = False
+    print("⚠️ Reflection system not available")
 
 
 def run_terminal_command(command: str) -> str:
@@ -207,6 +218,241 @@ def get_working_directory() -> str:
     return f"Directorio actual: {current_dir}"
 
 
+def analyze_code_quality(filepath: str, reflection_types: str = "all") -> str:
+    """
+    Analiza la calidad del código usando el sistema de reflexión.
+    
+    Args:
+        filepath: Ruta del archivo a analizar
+        reflection_types: Tipos de reflexión separados por coma o "all"
+    Returns:
+        Resultados del análisis de calidad
+    """
+    if not REFLECTION_AVAILABLE:
+        return "Error: Sistema de reflexión no disponible"
+    
+    print(f"🔍 Analizando calidad de código: {filepath}")
+    
+    try:
+        # Leer el archivo
+        path = Path(filepath)
+        if not path.exists():
+            return f"Error: El archivo {filepath} no existe"
+        
+        with open(path, 'r', encoding='utf-8') as f:
+            code = f.read()
+        
+        # Configurar tipos de reflexión
+        if reflection_types.lower() == "all":
+            types = list(ReflectionType)
+        else:
+            type_names = [t.strip().lower() for t in reflection_types.split(',')]
+            types = []
+            for type_name in type_names:
+                try:
+                    types.append(ReflectionType(type_name))
+                except ValueError:
+                    pass
+        
+        # Ejecutar reflexión
+        reflector = CodeReflector()
+        results = reflector.reflect_on_code(code, filepath, types)
+        
+        # Formatear resultados
+        return format_reflection_results(results)
+        
+    except Exception as e:
+        return f"Error analizando código: {e}"
+
+
+def lint_code(filepath: str) -> str:
+    """
+    Ejecuta linter específicamente en un archivo.
+    
+    Args:
+        filepath: Ruta del archivo a verificar
+    Returns:
+        Resultados del linter
+    """
+    if not REFLECTION_AVAILABLE:
+        return "Error: Sistema de reflexión no disponible"
+    
+    print(f"🔍 Ejecutando linter en: {filepath}")
+    
+    try:
+        path = Path(filepath)
+        if not path.exists():
+            return f"Error: El archivo {filepath} no existe"
+        
+        with open(path, 'r', encoding='utf-8') as f:
+            code = f.read()
+        
+        reflector = CodeReflector()
+        results = reflector.reflect_on_code(code, filepath, [ReflectionType.LINTER])
+        
+        if results:
+            result = results[0]
+            output = f"📊 LINTER RESULTS - Score: {result.score}/100\n"
+            output += "=" * 40 + "\n"
+            
+            if result.issues:
+                output += "❌ Issues found:\n"
+                for issue in result.issues:
+                    output += f"  • {issue}\n"
+            
+            if result.suggestions:
+                output += "\n💡 Suggestions:\n"
+                for suggestion in result.suggestions:
+                    output += f"  • {suggestion}\n"
+            
+            if not result.issues:
+                output += "✅ No issues found!\n"
+            
+            return output
+        else:
+            return "Error: No se pudieron obtener resultados del linter"
+        
+    except Exception as e:
+        return f"Error ejecutando linter: {e}"
+
+
+def check_best_practices(filepath: str) -> str:
+    """
+    Verifica mejores prácticas en un archivo de código.
+    
+    Args:
+        filepath: Ruta del archivo a verificar
+    Returns:
+        Resultados de mejores prácticas
+    """
+    if not REFLECTION_AVAILABLE:
+        return "Error: Sistema de reflexión no disponible"
+    
+    return analyze_code_quality(filepath, "best_practices")
+
+
+def check_solid_principles(filepath: str) -> str:
+    """
+    Verifica principios SOLID en un archivo de código.
+    
+    Args:
+        filepath: Ruta del archivo a verificar
+    Returns:
+        Resultados de principios SOLID
+    """
+    if not REFLECTION_AVAILABLE:
+        return "Error: Sistema de reflexión no disponible"
+    
+    return analyze_code_quality(filepath, "solid")
+
+
+def check_dry_principle(filepath: str) -> str:
+    """
+    Verifica principio DRY en un archivo de código.
+    
+    Args:
+        filepath: Ruta del archivo a verificar
+    Returns:
+        Resultados de principio DRY
+    """
+    if not REFLECTION_AVAILABLE:
+        return "Error: Sistema de reflexión no disponible"
+    
+    return analyze_code_quality(filepath, "dry")
+
+
+def run_tests(directory: str = ".", test_pattern: str = "test_*.py") -> str:
+    """
+    Ejecuta tests en un directorio usando pytest o unittest.
+    
+    Args:
+        directory: Directorio donde buscar tests
+        test_pattern: Patrón de archivos de test
+    Returns:
+        Resultados de los tests
+    """
+    print(f"🧪 Ejecutando tests en: {directory}")
+    
+    try:
+        # Intentar con pytest primero
+        pytest_result = subprocess.run(
+            ["python", "-m", "pytest", directory, "-v"],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        
+        if pytest_result.returncode == 0:
+            return f"✅ Tests ejecutados exitosamente con pytest:\n{pytest_result.stdout}"
+        else:
+            # Intentar con unittest
+            unittest_result = subprocess.run(
+                ["python", "-m", "unittest", "discover", "-s", directory, "-p", test_pattern, "-v"],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            if unittest_result.returncode == 0:
+                return f"✅ Tests ejecutados exitosamente con unittest:\n{unittest_result.stdout}"
+            else:
+                return f"❌ Tests fallaron:\npytest: {pytest_result.stderr}\nunittest: {unittest_result.stderr}"
+    
+    except subprocess.TimeoutExpired:
+        return "⏰ Timeout ejecutando tests (>120s)"
+    except FileNotFoundError:
+        return "❌ Error: Python no encontrado en el PATH"
+    except Exception as e:
+        return f"❌ Error ejecutando tests: {e}"
+
+
+def format_code(filepath: str, formatter: str = "autopep8") -> str:
+    """
+    Formatea código usando autopep8, black u otro formateador.
+    
+    Args:
+        filepath: Ruta del archivo a formatear
+        formatter: Formateador a usar ("autopep8", "black")
+    Returns:
+        Resultado del formateo
+    """
+    print(f"🎨 Formateando código: {filepath}")
+    
+    try:
+        path = Path(filepath)
+        if not path.exists():
+            return f"Error: El archivo {filepath} no existe"
+        
+        if formatter == "autopep8":
+            result = subprocess.run(
+                ["python", "-m", "autopep8", "--in-place", "--aggressive", str(path)],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+        elif formatter == "black":
+            result = subprocess.run(
+                ["python", "-m", "black", str(path)],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+        else:
+            return f"Error: Formateador '{formatter}' no soportado"
+        
+        if result.returncode == 0:
+            return f"✅ Código formateado exitosamente con {formatter}"
+        else:
+            return f"❌ Error formateando: {result.stderr}"
+    
+    except subprocess.TimeoutExpired:
+        return "⏰ Timeout formateando código"
+    except FileNotFoundError:
+        return f"❌ Error: {formatter} no encontrado. Instala con: pip install {formatter}"
+    except Exception as e:
+        return f"❌ Error formateando código: {e}"
+
+
 # Mapeo de herramientas disponibles
 AVAILABLE_TOOLS = {
     "run_terminal_command": run_terminal_command,
@@ -216,6 +462,13 @@ AVAILABLE_TOOLS = {
     "create_directory": create_directory,
     "find_files": find_files,
     "get_working_directory": get_working_directory,
+    "analyze_code_quality": analyze_code_quality,
+    "lint_code": lint_code,
+    "check_best_practices": check_best_practices,
+    "check_solid_principles": check_solid_principles,
+    "check_dry_principle": check_dry_principle,
+    "run_tests": run_tests,
+    "format_code": format_code,
 }
 
 # Descripciones de herramientas para el modelo de IA
@@ -224,6 +477,8 @@ TOOL_DESCRIPTIONS = """
 HERRAMIENTAS DISPONIBLES
 
 Puedes usar las siguientes herramientas para completar tareas:
+
+## HERRAMIENTAS BÁSICAS
 
 1. **run_terminal_command(command: str)**
    Ejecuta un comando en la terminal del sistema.
@@ -239,7 +494,7 @@ Puedes usar las siguientes herramientas para completar tareas:
 
 4. **list_directory(path: str)**
    Lista el contenido de un directorio.
-   Ejemplo: list_directory('.') o list_directory('/Users/usuario/proyecto')
+   Ejemplo: list_directory('.') o list_directory('/ruta/proyecto')
 
 5. **create_directory(path: str)**
    Crea un directorio (y directorios padre si es necesario).
@@ -253,9 +508,42 @@ Puedes usar las siguientes herramientas para completar tareas:
    Obtiene el directorio de trabajo actual.
    Ejemplo: get_working_directory()
 
+## HERRAMIENTAS DE CALIDAD DE CÓDIGO
+
+8. **analyze_code_quality(filepath: str, reflection_types: str)**
+   Analiza la calidad del código usando múltiples técnicas de reflexión.
+   reflection_types: "all", "linter", "best_practices", "simplicity", "solid", "dry", "tdd"
+   Ejemplo: analyze_code_quality('main.py', 'all')
+
+9. **lint_code(filepath: str)**
+   Ejecuta verificación de linter específicamente.
+   Ejemplo: lint_code('main.py')
+
+10. **check_best_practices(filepath: str)**
+    Verifica mejores prácticas de programación.
+    Ejemplo: check_best_practices('main.py')
+
+11. **check_solid_principles(filepath: str)**
+    Evalúa principios SOLID en el código.
+    Ejemplo: check_solid_principles('main.py')
+
+12. **check_dry_principle(filepath: str)**
+    Verifica principio DRY (Don't Repeat Yourself).
+    Ejemplo: check_dry_principle('main.py')
+
+13. **run_tests(directory: str, test_pattern: str)**
+    Ejecuta tests usando pytest o unittest.
+    Ejemplo: run_tests('.', 'test_*.py')
+
+14. **format_code(filepath: str, formatter: str)**
+    Formatea código usando autopep8 o black.
+    Ejemplo: format_code('main.py', 'autopep8')
+
 IMPORTANTE:
 - Usa comillas simples para strings en los argumentos
 - Siempre verifica el resultado de tus acciones
 - Para tareas complejas, divídelas en pasos más pequeños
+- Usa las herramientas de calidad ANTES de finalizar cualquier código
+- El sistema de reflexión te ayudará a mejorar la calidad del código automáticamente
 ---
 """
