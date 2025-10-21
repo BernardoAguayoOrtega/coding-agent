@@ -24,6 +24,7 @@ from .agents import (
     CodeReviewerAgent,
     QAEngineerAgent,
     EvaluatorAgent,
+    ContextSummarizerAgent,
 )
 
 console = Console()
@@ -88,6 +89,7 @@ class AIDevTeam:
             "CodeReviewer": CodeReviewerAgent(self.groq_client, self.tools, self.human_loop),
             "QAEngineer": QAEngineerAgent(self.groq_client, self.tools, self.human_loop),
             "Evaluator": EvaluatorAgent(self.groq_client, self.tools, self.human_loop),
+            "ContextSummarizer": ContextSummarizerAgent(self.groq_client, self.tools, self.human_loop),
         }
 
         console.print("[green]✓ AI Dev Team initialized[/green]\n")
@@ -151,6 +153,8 @@ class AIDevTeam:
         if use_session_context:
             context.update(self.session_context)
 
+        agents_executed = 0  # Track for summarization
+
         for i, phase in enumerate(plan.get("phases", []), 1):
             console.print(f"\n[bold yellow]📦 Phase {i}: {phase['name']}[/bold yellow]")
             console.print(f"[dim]{phase['description']}[/dim]")
@@ -191,6 +195,15 @@ class AIDevTeam:
                 # Add to context for next agents
                 phase_results[agent_name] = result
                 context[agent_name] = result
+                agents_executed += 1
+
+                # Check if context should be summarized
+                if Config.ENABLE_CONTEXT_SUMMARIZATION:
+                    should_summarize = self._should_summarize_context(context, agents_executed)
+                    if should_summarize:
+                        console.print("\n[yellow]🔄 Context growing large, summarizing...[/yellow]")
+                        context = self._summarize_context(context)
+                        agents_executed = 0  # Reset counter after summarization
 
         # Update session context if enabled
         if use_session_context:
@@ -231,6 +244,76 @@ class AIDevTeam:
 
         console.print(phase_table)
         console.print()
+
+    def _should_summarize_context(self, context: dict, agents_executed: int) -> bool:
+        """
+        Check if context should be summarized
+
+        Args:
+            context: Current context dict
+            agents_executed: Number of agents executed since last summarization
+
+        Returns:
+            True if summarization should be triggered
+        """
+        import json
+
+        # Don't summarize if already summarized recently
+        if "context_summary" in context and "summarized_at" in context:
+            # Check if enough new agents have run since summarization
+            if agents_executed < Config.SUMMARIZE_AFTER_N_AGENTS:
+                return False
+
+        # Check size threshold
+        context_str = json.dumps(context, default=str)
+        size_exceeds = len(context_str) > Config.CONTEXT_SUMMARIZATION_THRESHOLD
+
+        # Check agent count threshold
+        count_exceeds = agents_executed >= Config.SUMMARIZE_AFTER_N_AGENTS
+
+        return size_exceeds or count_exceeds
+
+    def _summarize_context(self, context: dict) -> dict:
+        """
+        Summarize context using ContextSummarizerAgent
+
+        Args:
+            context: Full context to summarize
+
+        Returns:
+            Compressed context with summary
+        """
+        import json
+
+        # Get original size
+        original_str = json.dumps(context, default=str)
+        original_size = len(original_str)
+
+        # Run summarization
+        summarizer = self.agents["ContextSummarizer"]
+        summary_result = summarizer.summarize_context(context)
+
+        # Display results
+        if self.verbose or original_size > 50000:
+            console.print(f"[dim]Original context: {original_size:,} characters[/dim]")
+            console.print(f"[dim]Compressed to: {summary_result['compressed_size']:,} characters[/dim]")
+            console.print(f"[green]✓ Compression ratio: {summary_result['compression_ratio']:.1f}%[/green]")
+
+        # Build new context with summary
+        compressed_context = {
+            "requirements": context.get("requirements"),
+            "output_dir": context.get("output_dir"),
+            "user_working_dir": context.get("user_working_dir"),
+            "complexity": context.get("complexity"),
+            "project_type": context.get("project_type"),
+            "plan": context.get("plan"),
+            # Add the summary
+            "context_summary": summary_result["summary"],
+            "summarized_at": str(__import__('datetime').datetime.now()),
+            "original_context_size": original_size,
+        }
+
+        return compressed_context
 
     def _display_summary(self):
         """Display final summary with stats"""

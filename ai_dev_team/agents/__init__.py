@@ -10,6 +10,7 @@ from .database_engineer import DatabaseEngineerAgent
 from .code_reviewer import CodeReviewerAgent
 from .qa_engineer import QAEngineerAgent
 from .evaluator import EvaluatorAgent
+from .context_summarizer import ContextSummarizerAgent
 
 __all__ = [
     "BaseAgent",
@@ -22,4 +23,5 @@ __all__ = [
     "CodeReviewerAgent",
     "QAEngineerAgent",
     "EvaluatorAgent",
+    "ContextSummarizerAgent",
 ]

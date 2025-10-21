@@ -28,6 +28,11 @@ class Config:
     AUTO_APPROVE = os.getenv("AUTO_APPROVE", "false").lower() == "true"
     APPROVAL_TIMEOUT = int(os.getenv("APPROVAL_TIMEOUT", "300"))
 
+    # Context Management
+    ENABLE_CONTEXT_SUMMARIZATION = os.getenv("ENABLE_CONTEXT_SUMMARIZATION", "true").lower() == "true"
+    CONTEXT_SUMMARIZATION_THRESHOLD = int(os.getenv("CONTEXT_SUMMARIZATION_THRESHOLD", "10000"))  # chars
+    SUMMARIZE_AFTER_N_AGENTS = int(os.getenv("SUMMARIZE_AFTER_N_AGENTS", "3"))  # summarize after every N agents
+
     # Model pricing (USD per 1M tokens)
     GROQ_PRICING = {
         "llama-3.3-70b-versatile": {"input": 0.59, "output": 0.79},
