@@ -26,18 +26,30 @@ You can use the following tools to accomplish tasks:
 
 {self._get_tool_descriptions()}
 
-When you need to use a tool, respond in this format:
+When you need to use a tool, respond in this EXACT format:
 
 TOOL: tool_name
 ARGS: {{"arg1": "value1", "arg2": "value2"}}
 REASONING: Why you're using this tool
 
-When you're done with a task, respond:
+CRITICAL RULES:
+- BIAS TOWARD ACTION: If asked to create/write a file, do it immediately. Don't analyze first.
+- For simple tasks (hello world, basic files), respond with TOOL call FIRST, then DONE.
+- Always use double quotes in JSON
+- filepath must be relative to output directory (e.g., "hello.py" or "src/app.js")
+- For write_file, content must be a valid JSON string with escaped newlines
+
+Example for creating a file:
+TOOL: write_file
+ARGS: {{"filepath": "hello.py", "content": "print('Hello World')\\n"}}
+REASONING: Creating the main Python file
+
+After using a tool, if task is complete, immediately respond:
 
 DONE
 SUMMARY: What you accomplished
 
-Always think step-by-step and explain your reasoning."""
+Be fast and action-oriented. Don't overthink simple tasks."""
 
     def _get_tool_descriptions(self) -> str:
         """Get descriptions of available tools"""
@@ -86,13 +98,28 @@ VISION OPERATIONS:
         self.conversation_history = []
 
         # Add context to initial message
+        complexity = context.get("complexity", "medium") if context else "medium"
+
         initial_message = f"Task: {task}"
+
+        # Add urgency hint for simple tasks
+        if complexity == "simple":
+            initial_message += "\n\n⚡ QUICK TASK: This is a simple task. Create the file immediately and mark DONE. No analysis needed."
+
         if context:
-            initial_message += f"\n\nContext from other agents:\n{json.dumps(context, indent=2)}"
+            initial_message += f"\n\nContext:\n{json.dumps(context, indent=2)}"
 
         self.conversation_history.append({"role": "user", "content": initial_message})
 
-        max_iterations = 20
+        # Adjust max iterations based on complexity
+        complexity = context.get("complexity", "medium") if context else "medium"
+        if complexity == "simple":
+            max_iterations = 2  # Simple tasks: tool call + DONE
+        elif complexity == "medium":
+            max_iterations = 8
+        else:
+            max_iterations = 15  # Complex tasks may need more iterations
+
         artifacts = {}
 
         for iteration in range(max_iterations):
@@ -101,17 +128,7 @@ VISION OPERATIONS:
 
             self.conversation_history.append({"role": "assistant", "content": response})
 
-            # Check if done
-            if "DONE" in response:
-                summary = self._extract_summary(response)
-                return {
-                    "status": "completed",
-                    "summary": summary,
-                    "artifacts": artifacts,
-                    "iterations": iteration + 1,
-                }
-
-            # Parse and execute tool call
+            # Parse and execute tool call FIRST
             tool_call = self._parse_tool_call(response)
 
             if tool_call:
@@ -130,8 +147,19 @@ VISION OPERATIONS:
                 self.conversation_history.append(
                     {"role": "user", "content": f"Tool result:\n{result}"}
                 )
-            else:
-                # No tool call found, ask agent to clarify
+
+            # Check if done AFTER tool execution
+            if "DONE" in response:
+                summary = self._extract_summary(response)
+                return {
+                    "status": "completed",
+                    "summary": summary,
+                    "artifacts": artifacts,
+                    "iterations": iteration + 1,
+                }
+
+            # If no tool call and no DONE, ask agent to clarify
+            if not tool_call:
                 self.conversation_history.append(
                     {
                         "role": "user",
@@ -150,7 +178,15 @@ VISION OPERATIONS:
         """Get response from Groq"""
         messages = [{"role": "system", "content": self.system_prompt}] + self.conversation_history
 
-        result = self.groq_client.chat(messages, temperature=0.7, max_tokens=2048)
+        # Reduce token limit for faster responses on simple tasks
+        # Check if task is simple from conversation history
+        context_str = str(self.conversation_history)
+        if "QUICK TASK" in context_str or "simple" in context_str.lower():
+            max_tokens = 512  # Quick response for simple tasks
+        else:
+            max_tokens = 2048  # Full response for complex tasks
+
+        result = self.groq_client.chat(messages, temperature=0.7, max_tokens=max_tokens)
 
         return result["content"]
 
@@ -158,8 +194,6 @@ VISION OPERATIONS:
         """Parse tool call from response"""
         # Look for TOOL: and ARGS: pattern
         tool_match = re.search(r"TOOL:\s*(\w+)", response)
-        args_match = re.search(r"ARGS:\s*({.*?})", response, re.DOTALL)
-        reasoning_match = re.search(r"REASONING:\s*(.+?)(?=\n\n|TOOL:|ARGS:|$)", response, re.DOTALL)
 
         if not tool_match:
             return None
@@ -167,13 +201,37 @@ VISION OPERATIONS:
         tool_name = tool_match.group(1)
         args = {}
 
-        if args_match:
-            try:
-                args = json.loads(args_match.group(1))
-            except json.JSONDecodeError:
-                # Try to extract args manually
-                pass
+        # Find ARGS: and extract JSON by counting braces
+        args_start = response.find("ARGS:")
+        if args_start != -1:
+            # Find the opening brace
+            json_start = response.find("{", args_start)
+            if json_start != -1:
+                # Count braces to find matching closing brace
+                brace_count = 0
+                json_end = json_start
+                for i in range(json_start, len(response)):
+                    if response[i] == '{':
+                        brace_count += 1
+                    elif response[i] == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            json_end = i + 1
+                            break
 
+                if json_end > json_start:
+                    args_str = response[json_start:json_end]
+                    try:
+                        args = json.loads(args_str)
+                    except json.JSONDecodeError as e:
+                        print(f"[ERROR] Failed to parse ARGS JSON: {e}")
+                        print(f"[ERROR] Raw args: {args_str[:300]}...")
+
+        reasoning_match = re.search(
+            r"REASONING:\s*(.+?)(?=\n(?:TOOL:|ARGS:|DONE)|$)",
+            response,
+            re.DOTALL
+        )
         reasoning = reasoning_match.group(1).strip() if reasoning_match else ""
 
         return {"tool": tool_name, "args": args, "reasoning": reasoning}

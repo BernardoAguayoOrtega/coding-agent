@@ -19,55 +19,51 @@ class OrchestratorAgent(BaseAgent):
     def _build_system_prompt(self) -> str:
         return """You are the Orchestrator, responsible for analyzing project requirements and creating an execution plan.
 
-Your job:
-1. Analyze the user's requirements
-2. Break down the project into logical phases
-3. Assign tasks to specialized agents:
-   - ProductManager: Refine requirements and create specs
-   - Architect: Design system architecture
-   - FrontendEngineer: Build UI components
-   - BackendEngineer: Build APIs and server logic
-   - DatabaseEngineer: Design database schema
-   - CodeReviewer: Review code quality
-   - QAEngineer: Test functionality
-   - Evaluator: Final validation
+CRITICAL: Detect task complexity and create appropriate plans!
 
-4. Create a detailed execution plan
+SIMPLE TASKS (1-2 files, basic scripts, hello world, single component):
+- Use ONLY the implementation agent (BackendEngineer OR FrontendEngineer)
+- Skip ProductManager, Architect, CodeReviewer, QAEngineer, Evaluator
+- 1 phase: Implementation
+
+MEDIUM TASKS (multiple files, small features, CRUD operations):
+- Use implementation agent + Evaluator
+- 2 phases: Implementation, Validation
+
+COMPLEX TASKS (full applications, multiple features, database):
+- Use all relevant agents
+- Multiple phases: Requirements, Architecture, Implementation, Quality, Validation
+
+Examples:
+- "create hello world" → SIMPLE → Just BackendEngineer
+- "create a login form" → SIMPLE → Just FrontendEngineer
+- "create a REST API with 3 endpoints" → MEDIUM → BackendEngineer + Evaluator
+- "build a todo app with database" → COMPLEX → Full team
+
+Available agents:
+- ProductManager: Refine requirements (COMPLEX only)
+- Architect: Design architecture (COMPLEX only)
+- FrontendEngineer: Build UI components
+- BackendEngineer: Build APIs and scripts
+- DatabaseEngineer: Design database schema (COMPLEX only)
+- CodeReviewer: Review code quality (COMPLEX only)
+- QAEngineer: Test functionality (COMPLEX only)
+- Evaluator: Final validation (MEDIUM/COMPLEX only)
 
 Respond in JSON format:
 
 {
-  "project_type": "fullstack_web_app | api | frontend_only | etc",
+  "project_type": "simple_script | single_component | api | fullstack_web_app | etc",
+  "complexity": "simple | medium | complex",
   "tech_stack": {
-    "frontend": "React | Vue | etc",
-    "backend": "Node.js | Python | etc",
-    "database": "PostgreSQL | MongoDB | etc"
+    "backend": "Python | Node.js | etc" (if applicable),
+    "frontend": "React | Vue | etc" (if applicable)
   },
   "phases": [
     {
-      "name": "Requirements",
-      "agents": ["ProductManager"],
-      "description": "Refine and document requirements"
-    },
-    {
-      "name": "Architecture",
-      "agents": ["Architect"],
-      "description": "Design system architecture"
-    },
-    {
       "name": "Implementation",
-      "agents": ["DatabaseEngineer", "BackendEngineer", "FrontendEngineer"],
-      "description": "Build the application"
-    },
-    {
-      "name": "Quality",
-      "agents": ["CodeReviewer", "QAEngineer"],
-      "description": "Review and test"
-    },
-    {
-      "name": "Validation",
-      "agents": ["Evaluator"],
-      "description": "Final validation"
+      "agents": ["BackendEngineer"],
+      "description": "Create the hello world script"
     }
   ]
 }
@@ -75,20 +71,54 @@ Respond in JSON format:
 After creating the plan, respond with:
 
 DONE
-SUMMARY: Created execution plan with N phases"""
+SUMMARY: Created [simple|medium|complex] execution plan with N phases"""
 
     def analyze_requirements(self, requirements: str) -> dict:
         """Analyze requirements and create execution plan"""
-        result = self.execute(f"Analyze these requirements and create an execution plan:\n\n{requirements}")
-
-        # Parse JSON plan from summary
         import json
         import re
+        
+        # FAST PATH: Detect simple tasks instantly without LLM
+        req_lower = requirements.lower()
+        simple_patterns = [
+            'hello world', 'create file', 'write file', 'make file',
+            'simple script', 'basic', 'quick', 'test file'
+        ]
+        
+        # Check if it's obviously simple
+        if any(pattern in req_lower for pattern in simple_patterns) or len(requirements.split()) < 15:
+            # Detect language/type
+            if 'react' in req_lower or 'jsx' in req_lower or 'component' in req_lower:
+                agent = 'FrontendEngineer'
+                tech = 'React'
+            elif 'html' in req_lower or 'css' in req_lower:
+                agent = 'FrontendEngineer'
+                tech = 'HTML'
+            else:
+                agent = 'BackendEngineer'
+                tech = 'Python'
+            
+            return {
+                "status": "fast_path",
+                "plan": {
+                    "project_type": "simple_script",
+                    "complexity": "simple",
+                    "tech_stack": {"language": tech},
+                    "phases": [{
+                        "name": "Implementation",
+                        "agents": [agent],
+                        "description": requirements
+                    }]
+                },
+                "summary": "Fast-tracked simple task",
+            }
+        
+        # Complex task - use LLM
+        result = self.execute(f"Analyze these requirements and create an execution plan:\n\n{requirements}")
 
         # Try to extract JSON from the conversation
         for msg in reversed(self.conversation_history):
             if msg["role"] == "assistant":
-                # Look for JSON object
                 json_match = re.search(r"\{.*\}", msg["content"], re.DOTALL)
                 if json_match:
                     try:
@@ -101,7 +131,7 @@ SUMMARY: Created execution plan with N phases"""
                     except json.JSONDecodeError:
                         pass
 
-        # Fallback: create a default plan
+        # Fallback
         return {
             "status": "fallback",
             "plan": self._create_default_plan(),
@@ -109,49 +139,18 @@ SUMMARY: Created execution plan with N phases"""
         }
 
     def _create_default_plan(self) -> dict:
-        """Create a default full-stack execution plan"""
+        """Create a default simple execution plan"""
         return {
-            "project_type": "fullstack_web_app",
+            "project_type": "simple_script",
+            "complexity": "simple",
             "tech_stack": {
-                "frontend": "React",
-                "backend": "Node.js/Express",
-                "database": "PostgreSQL",
+                "backend": "Python",
             },
             "phases": [
                 {
-                    "name": "Requirements",
-                    "agents": ["ProductManager"],
-                    "description": "Refine and document requirements",
-                },
-                {
-                    "name": "Architecture",
-                    "agents": ["Architect"],
-                    "description": "Design system architecture",
-                },
-                {
-                    "name": "Database",
-                    "agents": ["DatabaseEngineer"],
-                    "description": "Design database schema",
-                },
-                {
-                    "name": "Backend",
+                    "name": "Implementation",
                     "agents": ["BackendEngineer"],
-                    "description": "Build API and server logic",
-                },
-                {
-                    "name": "Frontend",
-                    "agents": ["FrontendEngineer"],
-                    "description": "Build user interface",
-                },
-                {
-                    "name": "Quality",
-                    "agents": ["CodeReviewer", "QAEngineer"],
-                    "description": "Review and test code",
-                },
-                {
-                    "name": "Validation",
-                    "agents": ["Evaluator"],
-                    "description": "Final validation",
+                    "description": "Create the requested files",
                 },
             ],
         }

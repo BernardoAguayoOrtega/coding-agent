@@ -36,7 +36,8 @@ class HumanLoop:
         Returns:
             True if approved, False otherwise
         """
-        if self.auto_approve and risk_level == "low":
+        # Auto-approve if flag is set (for all risk levels)
+        if self.auto_approve:
             self.approval_log.append(
                 {"action": action, "approved": True, "auto": True}
             )

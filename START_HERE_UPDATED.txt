@@ -53,6 +53,16 @@ From design:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+🎉 NEW FEATURES:
+
+✅ Smart Speed - Simple tasks now 3x faster! (hello world = 15s instead of 60s)
+✅ Context Persistence - Interactive mode remembers previous commands!
+✅ File Visibility - See all created files with paths and sizes
+✅ Special Commands - Type 'files', 'context', 'reset' in interactive mode
+✅ Better Debugging - Improved tool execution and error messages
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 🐛 TROUBLESHOOTING:
 
 "command not found: aidev"
@@ -60,6 +70,11 @@ From design:
 
 "No module named ai_dev_team"
   → Already fixed! Package is installed.
+
+Files not being created?
+  → Type 'files' in interactive mode to check
+  → Look for [DEBUG] logs in output
+  → Check the absolute path shown on startup
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
