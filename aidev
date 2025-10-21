@@ -1,0 +1,88 @@
+#!/bin/bash
+# AI Dev Team - Global Launcher
+# Usage: aidev "your requirements" [options]
+
+# Configuration
+AI_DEV_HOME="/Users/bernardo/Documents/GitHub/coding-agent"
+VENV_PATH="$AI_DEV_HOME/.venv"
+
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# Function to show usage
+show_usage() {
+    echo -e "${BLUE}AI Dev Team - Your AI Software Development Team${NC}"
+    echo ""
+    echo "Usage:"
+    echo "  aidev \"your requirements\" [options]"
+    echo ""
+    echo "Examples:"
+    echo "  aidev \"Create a Python calculator\""
+    echo "  aidev \"Build a REST API\" --auto-approve"
+    echo "  aidev \"Build this UI\" --image design.png --output ./src"
+    echo "  aidev --interactive"
+    echo ""
+    echo "Options:"
+    echo "  --help              Show this help"
+    echo "  --auto-approve      Skip human approvals"
+    echo "  --output DIR        Output directory (default: workspace/)"
+    echo "  --image PATH        Include design image"
+    echo "  --interactive       Interactive mode"
+    echo "  --verbose           Show detailed logs"
+    echo "  --max-iterations N  Max iterations per agent"
+    echo ""
+    echo "Current directory: $(pwd)"
+    echo "Output will go to: ${1:-workspace/}"
+}
+
+# Check if help requested
+if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]] || [[ -z "$1" ]]; then
+    show_usage
+    exit 0
+fi
+
+# Check if AI Dev Team exists
+if [[ ! -d "$AI_DEV_HOME" ]]; then
+    echo -e "${RED}Error: AI Dev Team not found at $AI_DEV_HOME${NC}"
+    exit 1
+fi
+
+# Check if venv exists
+if [[ ! -d "$VENV_PATH" ]]; then
+    echo -e "${RED}Error: Virtual environment not found at $VENV_PATH${NC}"
+    echo "Run: cd $AI_DEV_HOME && python -m venv .venv && pip install -r requirements.txt"
+    exit 1
+fi
+
+# Save current directory
+ORIGINAL_DIR=$(pwd)
+
+# Activate virtual environment
+echo -e "${GREEN}🚀 Activating AI Dev Team...${NC}"
+source "$VENV_PATH/bin/activate"
+
+# Change to AI Dev Team directory
+cd "$AI_DEV_HOME"
+
+# If no --output specified, use current directory
+if [[ ! "$*" =~ "--output" ]]; then
+    # Add --output with original directory
+    python -m ai_dev_team "$@" --output "$ORIGINAL_DIR"
+else
+    # User specified output, use as-is
+    python -m ai_dev_team "$@"
+fi
+
+# Store exit code
+EXIT_CODE=$?
+
+# Return to original directory
+cd "$ORIGINAL_DIR"
+
+# Deactivate venv
+deactivate
+
+exit $EXIT_CODE
