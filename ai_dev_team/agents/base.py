@@ -36,13 +36,19 @@ CRITICAL RULES:
 - BIAS TOWARD ACTION: If asked to create/write a file, do it immediately. Don't analyze first.
 - For simple tasks (hello world, basic files), respond with TOOL call FIRST, then DONE.
 - Always use double quotes in JSON
-- filepath must be relative to output directory (e.g., "hello.py" or "src/app.js")
 - For write_file, content must be a valid JSON string with escaped newlines
+
+PATH RULES (VERY IMPORTANT):
+- ALL file paths must be RELATIVE to the output directory
+- NEVER use absolute paths
+- Examples: "hello.py", "src/app.js", "components/Navbar.jsx"
+- The output directory and user's working directory are available in context
+- Files will be created in: output_dir / your_filepath
 
 Example for creating a file:
 TOOL: write_file
 ARGS: {{"filepath": "hello.py", "content": "print('Hello World')\\n"}}
-REASONING: Creating the main Python file
+REASONING: Creating the main Python file in the output directory
 
 After using a tool, if task is complete, immediately respond:
 
@@ -102,12 +108,25 @@ VISION OPERATIONS:
 
         initial_message = f"Task: {task}"
 
+        # Add path information prominently
+        if context:
+            output_dir = context.get("output_dir", "workspace/")
+            user_dir = context.get("user_working_dir", "unknown")
+            initial_message += f"\n\n📍 PATH INFORMATION:"
+            initial_message += f"\n- Output Directory (where files will be created): {output_dir}"
+            initial_message += f"\n- User's Working Directory: {user_dir}"
+            initial_message += f"\n- Use RELATIVE paths only (e.g., 'hello.py', 'src/app.js')"
+            initial_message += f"\n- Files will be created at: {output_dir}/<your_filepath>"
+
         # Add urgency hint for simple tasks
         if complexity == "simple":
             initial_message += "\n\n⚡ QUICK TASK: This is a simple task. Create the file immediately and mark DONE. No analysis needed."
 
         if context:
-            initial_message += f"\n\nContext:\n{json.dumps(context, indent=2)}"
+            # Add full context (excluding path info we already showed)
+            context_copy = {k: v for k, v in context.items() if k not in ["output_dir", "user_working_dir"]}
+            if context_copy:
+                initial_message += f"\n\nAdditional Context:\n{json.dumps(context_copy, indent=2)}"
 
         self.conversation_history.append({"role": "user", "content": initial_message})
 
